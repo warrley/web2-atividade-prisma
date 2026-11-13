@@ -1,0 +1,87 @@
+name: CI Pipeline (Docker, Prisma, PostgreSQL & Migrations)
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+jobs:
+  test-and-build:
+    name: Testar Migrations, Dados e Build Docker
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ${{ vars.DB_USER || secrets.DB_USER || 'postgres' }}
+          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD || 'postgres' }}
+          POSTGRES_DB: ${{ vars.DB_NAME || secrets.DB_NAME || 'web2_db' }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL || format('postgresql://{0}:{1}@localhost:5432/{2}?schema=public', vars.DB_USER || secrets.DB_USER || 'postgres', secrets.DB_PASSWORD || 'postgres', vars.DB_NAME || secrets.DB_NAME || 'web2_db') }}
+      PORT: ${{ vars.PORT || '3000' }}
+
+    steps:
+      - name: Baixar código do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar ambiente Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Instalar dependências
+        run: |
+          echo "=== Instalando dependências com npm ci ==="
+          npm ci
+
+      - name: Gerar Prisma Client
+        run: |
+          echo "=== Gerando Prisma Client ==="
+          npx prisma generate
+
+      - name: 1. Testar Migrations (Estrutura do Banco)
+        run: |
+          echo "=== Testando aplicação de migrations no PostgreSQL ==="
+          npx prisma migrate deploy
+          echo "✓ Migrations aplicadas com sucesso!"
+
+      - name: 2. Testar Seed (Dados do Banco)
+        run: |
+          echo "=== Testando inserção de dados iniciais (Seed) ==="
+          npx prisma db seed
+          echo "✓ Dados iniciais inseridos com sucesso!"
+
+      - name: 3. Executar Testes Automatizados (Validação Completa)
+        run: |
+          echo "=== Executando suite de testes (Estrutura, Dados e Endpoints da API) ==="
+          npm test
+
+      - name: Compilar TypeScript
+        run: |
+          echo "=== Compilando aplicação TypeScript ==="
+          npm run build
+          ls -la dist
+
+      - name: 4. Construir Imagem Docker
+        run: |
+          echo "=== Testando criação da imagem Docker ==="
+          docker build -t web2-atividade-prisma:latest .
+          echo "✓ Imagem Docker construída com sucesso!"
+
+      - name: Finalização
+        run: |
+          echo "✓ Pipeline executada com sucesso! Todas as validações passaram."
