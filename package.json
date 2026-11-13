@@ -1,7 +1,6 @@
 {
   "name": "web2-atividade-prisma",
   "version": "1.0.0",
-  "description": "CRUD com Node.js, Express, TypeScript, Prisma e PostgreSQL com Docker e GitHub Actions CI/CD",
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
